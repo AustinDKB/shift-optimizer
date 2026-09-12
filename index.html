@@ -1,0 +1,668 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>QSR Shift Optimizer</title>
+  <link rel="stylesheet" href="assets/styles.css" />
+  <link rel="stylesheet" href="assets/theme-sk.css" />
+  <style>
+    .bar{transition:height .45s cubic-bezier(.22,1,.36,1)}
+    .cell{transition:background-color .4s ease, box-shadow .3s ease, transform .3s ease}
+    @keyframes hotpulse{
+      0%,100%{box-shadow:0 0 0 3px #fff, 0 0 0 6px #c2410c, 0 0 16px 3px rgba(194,65,12,.55)}
+      50%    {box-shadow:0 0 0 3px #fff, 0 0 0 7px #ea580c, 0 0 34px 10px rgba(234,88,12,.95)}
+    }
+    .hotcell{animation:hotpulse 1s ease-in-out infinite}
+    ::-webkit-scrollbar{height:8px;width:8px}
+    ::-webkit-scrollbar-thumb{background:#d4d4d4;border-radius:99px}
+    html, body { width: 100%; margin: 0; }
+    .sk-app-shell {
+      width: 100%;
+      max-width: none;
+      box-sizing: border-box;
+    }
+    .pref-row { display: flex; flex-wrap: wrap; align-items: center; gap: 0.5rem 1.25rem; }
+    .pref-item { display: flex; align-items: center; gap: 0.5rem; min-width: 0; }
+    .pref-item label { flex-shrink: 0; }
+    .pref-item select { min-width: 0; max-width: 100%; }
+    .btn-label { display: inline; }
+    .sched-track { min-width: 600px; height: 100%; display: flex; flex-direction: column; min-height: 0; }
+    .sk-demo-footer { text-align: center; font-size: 11px; color: #a3a3a3; margin-top: 0.5rem; flex-shrink: 0; }
+
+    /* —— Mobile / tablet: scrollable stack —— */
+    @media (max-width: 1023px) {
+      html, body.sk-body {
+        height: auto;
+        min-height: 100%;
+        overflow-x: hidden;
+        overflow-y: auto;
+        -webkit-overflow-scrolling: touch;
+      }
+      .sk-app-shell {
+        height: auto;
+        min-height: 100%;
+        padding: 0.75rem !important;
+      }
+      .sk-demo-header {
+        gap: 0.5rem;
+        margin-bottom: 0.5rem;
+      }
+      .sk-demo-header h1 { font-size: 1.125rem; line-height: 1.25; }
+      .sk-demo-header .sk-sub { display: none; }
+      .sk-demo-actions button {
+        padding: 0.55rem 0.7rem;
+      }
+      .btn-label { display: none; }
+      .pref-row {
+        flex-direction: column;
+        align-items: stretch;
+        gap: 0.5rem;
+        margin-bottom: 0.75rem;
+      }
+      .pref-item {
+        flex-direction: column;
+        align-items: stretch;
+        gap: 0.25rem;
+      }
+      .pref-item select { width: 100%; }
+      .sk-app-shell > main {
+        display: flex;
+        flex-direction: column;
+        gap: 0.75rem;
+        height: auto;
+        min-height: 0;
+      }
+      .sk-col-left {
+        display: flex;
+        flex-direction: column;
+        gap: 0.75rem;
+        overflow: visible;
+        min-height: 0;
+      }
+      .sk-stats { grid-template-columns: repeat(2, minmax(0, 1fr)) !important; gap: 0.5rem !important; }
+      .sk-stats .sk-panel { padding: 0.6rem 0.7rem; }
+      .sk-stats .text-2xl { font-size: 1.25rem; line-height: 1.3; }
+      #scenarioTabs {
+        display: flex;
+        flex-wrap: nowrap;
+        gap: 0.5rem;
+        overflow-x: auto;
+        -webkit-overflow-scrolling: touch;
+        padding-bottom: 0.15rem;
+      }
+      #scenarioTabs .scenario-tab {
+        flex: 0 0 auto;
+        max-width: 11rem;
+        padding: 0.45rem 0.7rem;
+        border-radius: 0.5rem;
+      }
+      #scenarioTabs .scenario-tab > div:last-child { display: none; }
+      #chart { height: 6rem; }
+      .sk-panel-chart .chart-legend { gap: 0.5rem; font-size: 0.7rem; }
+      .sk-ledger { display: none; }
+      .sk-schedule {
+        height: auto;
+        min-height: 18rem;
+        max-height: none;
+      }
+      .sk-schedule .sched-scroll {
+        overflow-x: auto;
+        -webkit-overflow-scrolling: touch;
+        margin: 0 -0.25rem;
+      }
+      .sched-track {
+        min-width: 520px;
+        height: auto;
+        max-height: 22rem;
+      }
+      #schedBody {
+        overflow-y: auto;
+        max-height: 18rem;
+      }
+      /* Tighten schedule lead/trail so hour cells stay readable */
+      #schedHead > div > div:first-child,
+      #schedBody > div > div:first-child {
+        width: 2rem !important;
+        padding-left: 0.15rem !important;
+        padding-right: 0.15rem !important;
+        font-size: 9px;
+      }
+      #schedHead > div > div:last-child,
+      #schedBody > div > div:last-child {
+        width: 3.25rem !important;
+        padding-right: 0.15rem !important;
+        font-size: 9px;
+      }
+      .sk-demo-footer { display: none; }
+    }
+
+    @media (max-width: 639px) {
+      .sk-app-shell { padding: 0.6rem !important; }
+      .heat-sub { display: none; }
+      #stepCaption { font-size: 0.75rem; min-height: 1rem; height: auto; margin-bottom: 0.4rem; }
+    }
+
+    /* —— Desktop: fill viewport, no page scroll —— */
+    @media (min-width: 1024px) {
+      html, body.sk-body {
+        height: 100%;
+        overflow: hidden;
+      }
+      .sk-app-shell {
+        height: 100%;
+        min-height: 0;
+      }
+      .sk-app-shell > main,
+      .sk-app-shell > main > * {
+        min-height: 0;
+      }
+      .sk-col-left {
+        overflow: hidden;
+      }
+      .sched-track { min-width: 600px; }
+    }
+  </style>
+</head>
+<body class="sk-body text-neutral-800 antialiased">
+  <div class="sk-app-shell mx-auto px-3 py-2 sm:px-4 sm:py-3 flex flex-col h-full min-h-0">
+
+    <!-- Header -->
+    <header class="sk-demo-header flex flex-wrap items-center justify-between gap-3 mb-2 shrink-0">
+      <div class="min-w-0">
+        <h1 class="text-xl sm:text-2xl font-extrabold tracking-tight sk-title">Shift Optimizer</h1>
+        <p class="sk-sub text-xs sm:text-sm text-neutral-500 truncate">Greedy coverage scheduler — watch shifts fill the forecast.</p>
+      </div>
+      <div class="sk-demo-actions flex items-center gap-2 shrink-0">
+        <button id="playBtn" class="inline-flex items-center gap-2 rounded-xl sk-btn-primary px-4 py-2.5 text-sm font-semibold text-white active:scale-95 transition" aria-label="Play or pause">
+          <svg id="playIcon" width="16" height="16" viewBox="0 0 24 24" fill="currentColor"><path d="M8 5v14l11-7z"/></svg>
+          <span id="playLabel" class="btn-label">Pause</span>
+        </button>
+        <button id="replayBtn" class="inline-flex items-center gap-2 sk-btn-secondary px-4 py-2.5 text-sm font-semibold active:scale-95 transition" aria-label="Replay">
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"><path d="M3 12a9 9 0 1 0 3-6.7"/><path d="M3 4v4h4"/></svg>
+          <span class="btn-label">Replay</span>
+        </button>
+      </div>
+    </header>
+
+    <!-- Preference options -->
+    <section class="pref-row mb-2 shrink-0">
+      <div class="pref-item">
+        <label for="lenOpt" class="text-[11px] font-semibold uppercase tracking-wide text-neutral-400">Shift length weighting</label>
+        <select id="lenOpt" class="sk-select rounded-md px-3 py-1.5 text-sm font-semibold focus:outline-none focus:ring-2 focus:ring-[color:var(--sk-primary-soft)] cursor-pointer"></select>
+      </div>
+      <div class="pref-item">
+        <label for="startOpt" class="text-[11px] font-semibold uppercase tracking-wide text-neutral-400">Shift preference balancing</label>
+        <select id="startOpt" class="sk-select rounded-md px-3 py-1.5 text-sm font-semibold focus:outline-none focus:ring-2 focus:ring-[color:var(--sk-primary-soft)] cursor-pointer"></select>
+      </div>
+      <div class="pref-item">
+        <label for="breakOpt" class="text-[11px] font-semibold uppercase tracking-wide text-neutral-400">Max breaks at once</label>
+        <select id="breakOpt" class="sk-select rounded-md px-3 py-1.5 text-sm font-semibold focus:outline-none focus:ring-2 focus:ring-[color:var(--sk-primary-soft)] cursor-pointer"></select>
+      </div>
+    </section>
+
+    <main class="flex-1 min-h-0 grid gap-3 sm:gap-4 lg:grid-cols-[1fr_minmax(0,480px)] lg:h-full">
+      <!-- LEFT: everything except the schedule -->
+      <div class="sk-col-left flex flex-col gap-3 min-h-0 overflow-y-auto lg:overflow-hidden">
+
+        <!-- Scenario switcher -->
+        <section id="scenarioTabs" class="flex flex-wrap gap-2 shrink-0"></section>
+
+        <!-- Stat cards -->
+        <section class="sk-stats grid grid-cols-2 sm:grid-cols-4 gap-3 shrink-0">
+      <div class="sk-panel p-3">
+        <div class="text-[11px] font-semibold uppercase tracking-wide text-neutral-400">Shifts placed</div>
+        <div class="mt-0.5 flex items-baseline gap-1"><span id="stShifts" class="text-2xl font-extrabold text-neutral-900">0</span><span id="stShiftsTot" class="text-sm font-medium text-neutral-400">/ 0</span></div>
+      </div>
+      <div class="sk-panel p-3">
+        <div class="text-[11px] font-semibold uppercase tracking-wide text-neutral-400">Labor hours</div>
+        <div class="mt-0.5"><span id="stHours" class="text-2xl font-extrabold sk-accent">0</span></div>
+      </div>
+      <div class="sk-panel p-3">
+        <div class="text-[11px] font-semibold uppercase tracking-wide text-neutral-400">Demand covered</div>
+        <div class="mt-0.5"><span id="stCover" class="text-2xl font-extrabold text-emerald-600">0%</span></div>
+      </div>
+      <div class="sk-panel p-3">
+        <div class="text-[11px] font-semibold uppercase tracking-wide text-neutral-400">Peak staff</div>
+        <div class="mt-0.5"><span id="stPeak" class="text-2xl font-extrabold text-neutral-900">0</span></div>
+      </div>
+    </section>
+
+    <!-- Coverage chart -->
+    <section class="sk-panel sk-panel-chart p-3 md:p-5 shrink-0">
+      <div class="flex flex-wrap items-center justify-between gap-2 mb-2">
+        <h2 class="text-base font-bold text-neutral-900">Hourly coverage</h2>
+        <div class="chart-legend flex items-center gap-3 text-xs font-medium">
+          <span class="inline-flex items-center gap-1.5"><span class="h-2.5 w-2.5 rounded-sm bg-neutral-200 ring-1 ring-neutral-300"></span>Target</span>
+          <span class="inline-flex items-center gap-1.5"><span class="h-2.5 w-2.5 rounded-sm bg-gradient-to-t from-[color:var(--sk-primary)] to-[color:var(--sk-primary-soft)]"></span>Scheduled</span>
+        </div>
+      </div>
+      <div id="chart" class="flex items-end gap-[3px] h-32"></div>
+      <div id="chartAxis" class="flex gap-[3px] mt-1.5 text-[10px] text-neutral-400 font-medium"></div>
+    </section>
+
+        <!-- Deficit map -->
+        <section class="sk-panel p-3 md:p-5 shrink-0">
+          <div class="flex flex-wrap items-center justify-between gap-1 mb-1">
+            <h2 class="text-base font-bold text-neutral-900">Deficit map</h2>
+            <span class="heat-sub text-xs font-medium text-neutral-400">shift length × start hour</span>
+          </div>
+          <p id="stepCaption" class="text-sm text-neutral-500 mb-2 h-5">Ready.</p>
+          <div class="overflow-x-auto">
+            <div id="heat" class="inline-block min-w-full"></div>
+          </div>
+        </section>
+
+        <!-- Ledger (desktop fills remaining height; hidden on mobile) -->
+        <section class="sk-ledger flex flex-col sk-panel p-3 md:p-5 overflow-hidden flex-1 min-h-0">
+          <h2 class="text-base font-bold text-neutral-900 mb-2 shrink-0">Shift ledger <span class="font-normal text-neutral-400 text-sm">· newest first</span></h2>
+          <div id="ledger" class="flex flex-col gap-2 flex-1 min-h-0 overflow-y-auto pr-1"></div>
+        </section>
+
+      </div><!-- /LEFT -->
+
+      <!-- RIGHT: full employee schedule -->
+      <section class="sk-schedule flex flex-col min-h-0 h-full sk-panel p-3 md:p-5">
+        <div class="flex flex-wrap items-center justify-between gap-2 mb-2 shrink-0">
+          <div>
+            <h2 class="text-lg font-bold text-neutral-900">Employee schedule</h2>
+            <p class="text-xs text-neutral-500">Ordered by start · 3 AM → 2 AM business day</p>
+          </div>
+          <div id="lenLegend" class="flex flex-wrap items-center gap-x-2.5 gap-y-1 text-xs font-medium"></div>
+        </div>
+        <div class="sched-scroll flex-1 min-h-0 overflow-x-auto">
+          <div class="sched-track">
+            <div id="schedHead" class="shrink-0"></div>
+            <div id="schedBody" class="flex-1 min-h-0 overflow-y-auto"></div>
+          </div>
+        </div>
+      </section>
+
+    </main>
+
+    <footer class="sk-demo-footer">Business day 3:00 AM → 2:00 AM · forecast smoothed with a 3-staff floor</footer>
+  </div>
+
+<script>
+// ---------- Algorithm (ported 1:1 from shift_optimizer.py) ----------
+const HOURS=24, DAY_START=3, MIN_STAFF=3;   // array index 0 = 3 AM
+// Demand scenarios (24 hourly values, index 0 = 3 AM).
+const SCENARIOS=[
+  {name:'Balanced weekday', emoji:'⚖️', desc:'Twin lunch & dinner peaks',
+   forecast:[6,6,6,8,14,14,14,14,18,24,18,16,10,28,26,26,20,12,18,10,8,6,6,6]},
+  {name:'Lunch rush', emoji:'🥪', desc:'Huge midday spike, quiet night',
+   forecast:[4,4,4,6,10,16,20,26,30,28,20,14,10,8,8,7,6,5,4,4,4,4,4,4]},
+  {name:'Dinner heavy', emoji:'🍽️', desc:'Builds all day to an evening peak',
+   forecast:[4,4,4,5,7,9,10,12,12,14,16,14,12,16,22,26,30,28,20,12,8,6,5,4]},
+  {name:'Late night', emoji:'🌙', desc:'Overnight bar crowd, slow mornings',
+   forecast:[16,14,10,8,6,6,7,8,10,12,12,10,10,12,14,16,18,20,22,24,26,24,20,18]},
+  {name:'Weekend all-day', emoji:'🎉', desc:'High and busy from open to close',
+   forecast:[6,6,8,12,18,22,24,26,28,30,28,26,24,26,28,30,28,26,22,18,14,10,8,6]},
+];
+const SHIFT_LENGTHS=[8,7,6,5,4,3];
+
+// ---- Tunable preferences (higher weight on a length = the optimizer favors it) ----
+const LENGTH_PRESETS={
+  balanced:{label:'Balanced (default)', w:{8:1.5,7:1,6:1,5:0.8,4:1,3:1.2}},
+  long:    {label:'Favor long shifts',  w:{8:2.2,7:1.7,6:1.3,5:0.9,4:0.6,3:0.4}},
+  short:   {label:'Favor short shifts', w:{8:0.4,7:0.6,6:0.9,5:1.1,4:1.6,3:2.2}},
+  uniform: {label:'No preference',      w:{8:1,7:1,6:1,5:1,4:1,3:1}},
+};
+const START_PRESETS={
+  avoid:  {label:'Avoid overnight starts', w:{0:0.7,1:0.7,2:0.7,20:0.7,21:0.7}},
+  strong: {label:'Strongly avoid nights',  w:{22:0.5,23:0.45,0:0.4,1:0.4,2:0.4,3:0.6,20:0.6,21:0.55}},
+  neutral:{label:'Any start hour',         w:{}},
+};
+let LENGTH_WEIGHTS=LENGTH_PRESETS.balanced.w;
+let START_WEIGHTS=START_PRESETS.avoid.w;
+
+const sum=a=>a.reduce((x,y)=>x+y,0);
+function bankRound(x){const f=Math.floor(x),fr=x-f;if(Math.abs(fr-0.5)<1e-9)return f%2===0?f:f+1;return Math.round(x);}
+function smooth(f,wNow=0.7,wPrev=0.3){const rev=[...f].reverse(),out=Array(f.length).fill(0);
+  for(let i=0;i<rev.length;i++){const p=i?out[i-1]:0;out[i]=Math.max(bankRound(wNow*rev[i]+wPrev*p),MIN_STAFF);}return out.reverse();}
+function shiftHours(start,len){const s=((start-DAY_START)%HOURS+HOURS)%HOURS,a=[];for(let i=0;i<len;i++)a.push((s+i)%HOURS);return a;}
+
+// Shifts of 5h+ take a 1-hour break ~60% through; never during 12–1 PM or 5–7 PM
+// (clock hours 12, 17, 18). On break the employee doesn't count toward labour.
+const BREAK_MIN_LEN=5, NO_BREAK_HOURS=new Set([12,17,18]);
+function breakOffset(sh,len){
+  if(len<BREAK_MIN_LEN) return -1;
+  const s=((sh-DAY_START)%HOURS+HOURS)%HOURS;
+  const clockAt=o=>((s+o)%HOURS+DAY_START)%HOURS;
+  const target=Math.floor(len*0.6);
+  for(let d=0;d<len;d++)
+    for(const off of (d===0?[target]:[target-d,target+d])){
+      if(off<1||off>len-2) continue;                 // keep break in the shift's interior
+      if(!NO_BREAK_HOURS.has(clockAt(off))) return off;
+    }
+  return -1;
+}
+// Break placement that also caps how many employees are on break in the same hour.
+// A legal break is mandatory for 5h+ shifts, so if every legal slot is at capacity
+// we relax the cap rather than skip the break.
+function chooseBreak(sh,len,breaksAt,maxBreaks){
+  if(len<BREAK_MIN_LEN) return -1;
+  const s=((sh-DAY_START)%HOURS+HOURS)%HOURS;
+  const clockAt=o=>((s+o)%HOURS+DAY_START)%HOURS;
+  const target=Math.floor(len*0.6);
+  const legal=[];
+  for(let d=0;d<len;d++)
+    for(const off of (d===0?[target]:[target-d,target+d])){
+      if(off<1||off>len-2 || NO_BREAK_HOURS.has(clockAt(off))) continue;
+      legal.push(off);
+      if(breaksAt[(s+off)%HOURS] < maxBreaks) return off;   // nearest slot under the cap
+    }
+  if(!legal.length) return -1;                              // no legal slot at all
+  // cap unavoidable (break is mandatory) → spread to the least-loaded legal hour
+  return legal.reduce((a,b)=> breaksAt[(s+b)%HOURS] < breaksAt[(s+a)%HOURS] ? b : a);
+}
+function scoreMatrix(def){return SHIFT_LENGTHS.map(len=>{const row=[];
+  for(let sh=0;sh<HOURS;sh++){const hrs=shiftHours(sh,len),bo=breakOffset(sh,len);
+    let c=0;for(let k=0;k<hrs.length;k++) if(k!==bo) c+=def[hrs[k]];   // break hour contributes nothing
+    row.push((c/len)*LENGTH_WEIGHTS[len]*(START_WEIGHTS[sh]??1));}return row;});}
+
+function buildRun(forecast,maxBreaks=Infinity){
+  const target=smooth(forecast), staffed=Array(HOURS).fill(0), tsum=sum(target), steps=[];
+  const breaksAt=Array(HOURS).fill(0);                 // employees on break per hour
+  let globalMin=0;
+  while(sum(staffed)<tsum){
+    const def=staffed.map((s,i)=>s-target[i]);
+    const m=scoreMatrix(def);
+    let best=Infinity,br=0,bc=0;
+    for(let r=0;r<m.length;r++)for(let c=0;c<HOURS;c++)if(m[r][c]<best){best=m[r][c];br=r;bc=c;}
+    globalMin=Math.min(globalMin,best);
+    const len=SHIFT_LENGTHS[br], sh=bc, hrs=shiftHours(sh,len);
+    const bo=chooseBreak(sh,len,breaksAt,maxBreaks);
+    if(bo>=0) breaksAt[hrs[bo]]++;
+    for(let k=0;k<hrs.length;k++) if(k!==bo) staffed[hrs[k]]++;   // skip the break hour
+    steps.push({matrix:m,r:br,c:bc,len,sh,hrs,bo,label:`${sh}-${(sh+len)%HOURS}`,staffed:[...staffed]});
+  }
+  return {target,steps,globalMin,tsum};
+}
+let RUN, MAXY;   // (re)built per scenario
+
+// ---------- Display helpers ----------
+const clock=h=>(h+DAY_START)%HOURS;                        // array idx -> clock hour
+const idxForClock=h=>((h-DAY_START)%HOURS+HOURS)%HOURS;    // clock hour -> array idx
+const hh=h=>String(h).padStart(2,'0')+":00";
+
+// build coverage chart columns once (left→right = clock 0..23)
+const chart=document.getElementById('chart'), axis=document.getElementById('chartAxis');
+const cols=[];
+for(let cl=0;cl<HOURS;cl++){
+  const idx=idxForClock(cl);
+  const wrap=document.createElement('div');
+  wrap.className='relative flex-1 h-full rounded-md';
+  wrap.innerHTML=`
+    <div class="ghost absolute inset-x-0 bottom-0 rounded-t-sm bg-neutral-200/80" style="height:0%"></div>
+    <div class="bar absolute inset-x-0 bottom-0 rounded-t-md bg-gradient-to-t from-[color:var(--sk-primary)] to-[color:var(--sk-primary-soft)]" style="height:0%"></div>`;
+  chart.appendChild(wrap);
+  cols.push({wrap,bar:wrap.querySelector('.bar'),ghost:wrap.querySelector('.ghost'),idx});
+  const lab=document.createElement('div');
+  lab.className='flex-1 text-center';
+  lab.textContent = cl%3===0? String(cl):'';
+  axis.appendChild(lab);
+}
+
+// scenario tabs
+const tabWrap=document.getElementById('scenarioTabs');
+const tabs=SCENARIOS.map((s,i)=>{
+  const b=document.createElement('button');
+  b.className='scenario-tab group text-left rounded-xl px-3.5 py-2 ring-1 transition active:scale-95';
+  b.innerHTML=`<div class="flex items-center gap-1.5 font-semibold text-sm">${s.emoji} ${s.name}</div>
+               <div class="text-[11px] opacity-70">${s.desc}</div>`;
+  b.onclick=()=>loadScenario(i);
+  tabWrap.appendChild(b); return b;
+});
+
+// preference option selects
+let activeLen='balanced', activeStart='avoid', activeBreaks=2;
+const BREAK_OPTS=[['1','1 at a time'],['2','2 at a time'],['3','3 at a time'],['99','No limit']];
+const lenSel=document.getElementById('lenOpt'), startSel=document.getElementById('startOpt'), breakSel=document.getElementById('breakOpt');
+const fillSel=(el,presets,active)=>el.innerHTML=Object.entries(presets)
+  .map(([k,v])=>`<option value="${k}"${k===active?' selected':''}>${v.label}</option>`).join('');
+fillSel(lenSel,LENGTH_PRESETS,activeLen);
+fillSel(startSel,START_PRESETS,activeStart);
+breakSel.innerHTML=BREAK_OPTS.map(([v,l])=>`<option value="${v}"${+v===activeBreaks?' selected':''}>${l}</option>`).join('');
+function applyWeights(){ LENGTH_WEIGHTS=LENGTH_PRESETS[activeLen].w; START_WEIGHTS=START_PRESETS[activeStart].w; }
+lenSel.onchange   =()=>{ activeLen=lenSel.value;   applyWeights(); loadScenario(activeScenario); };
+startSel.onchange =()=>{ activeStart=startSel.value; applyWeights(); loadScenario(activeScenario); };
+breakSel.onchange =()=>{ activeBreaks=+breakSel.value; loadScenario(activeScenario); };
+
+// build heatmap grid
+const heat=document.getElementById('heat');
+heat.style.display='grid';
+heat.style.gridTemplateColumns=`2.6rem repeat(${HOURS}, minmax(0,1fr))`;
+heat.style.gap='3px';
+const heatCells=[]; // [row][col]
+// header row
+heat.appendChild(cell('','text-[10px] text-transparent'));
+for(let c=0;c<HOURS;c++) heat.appendChild(cell(c%3===0?c:'', 'text-[9px] text-neutral-400 font-semibold flex items-center justify-center'));
+for(let r=0;r<SHIFT_LENGTHS.length;r++){
+  heat.appendChild(cell(SHIFT_LENGTHS[r]+'h','text-[10px] text-neutral-500 font-semibold flex items-center justify-end pr-1'));
+  const rowCells=[];
+  for(let c=0;c<HOURS;c++){
+    const el=document.createElement('div');
+    el.className='cell rounded-[3px] aspect-square bg-neutral-100';
+    heat.appendChild(el); rowCells.push(el);
+  }
+  heatCells.push(rowCells);
+}
+function cell(txt,cls){const d=document.createElement('div');d.className=cls;d.textContent=txt;return d;}
+
+// violet color scale for negative (deficit) scores
+// Dramatic scale, normalized to THIS step's worst deficit so the hottest cell
+// is always maxed out. Ramp is gamma-shaped so only the biggest deficits blaze.
+const HEAT_STOPS=[[255,251,235],[253,224,151],[247,178,44],[194,65,12],[124,45,18]]; // amber→gold→orange→deep (hot = worst)
+function heatColor(v,vmin){
+  if(v>=-1e-9 || vmin>=-1e-9) return '#fafafa';   // no deficit → near-white
+  let t=Math.min(1, v/vmin);                       // 0..1, 1 = worst deficit this step
+  t=Math.pow(t,1.7);                               // keep mids pale, blow out the top
+  const n=HEAT_STOPS.length-1, seg=Math.min(Math.floor(t*n),n-1), lt=t*n-seg;
+  const a=HEAT_STOPS[seg], b=HEAT_STOPS[seg+1], m=i=>Math.round(a[i]+(b[i]-a[i])*lt);
+  return `rgb(${m(0)},${m(1)},${m(2)})`;
+}
+
+// ---------- Employee schedule (roster grid, 3 AM → 2 AM) ----------
+// Saskatchewan evergreen / wheat categorical cycle
+const LEN_COLORS={8:'#081c15',7:'#1b4332',6:'#2d6a4f',5:'#c9a227',4:'#b45309',3:'#5c5648'};
+const schedHead=document.getElementById('schedHead'), schedBody=document.getElementById('schedBody');
+let empRows=[], schedCells=[];
+
+// legend (built once)
+document.getElementById('lenLegend').innerHTML=[8,7,6,5,4,3].map(l=>
+  `<span class="inline-flex items-center gap-1.5"><span class="h-2.5 w-2.5 rounded-sm" style="background:${LEN_COLORS[l]}"></span>${l}h</span>`).join('')
+  +`<span class="inline-flex items-center gap-1 text-neutral-500">☕ break</span>`;
+
+// build a row: fixed lead + 24-cell track + fixed trail
+function makeRow(lead, cellFn, trail, rowCls){
+  const row=document.createElement('div');
+  row.className='flex items-stretch '+(rowCls||'');
+  const l=document.createElement('div'); l.className='w-14 shrink-0 flex items-center px-1'; l.innerHTML=lead;
+  const track=document.createElement('div'); track.className='relative flex flex-1';
+  for(let c=0;c<HOURS;c++){
+    const cell=document.createElement('div');
+    cell.className='flex-1 border-r border-neutral-100 last:border-r-0 flex items-center justify-center';
+    if(cellFn) cellFn(cell,c);
+    track.appendChild(cell);
+  }
+  const t=document.createElement('div'); t.className='w-24 shrink-0 flex items-center justify-end pr-1'; t.innerHTML=trail;
+  row.append(l,track,t); schedHead.appendChild(row);
+  return {row,track};
+}
+
+function buildSchedule(){
+  schedHead.innerHTML=''; schedBody.innerHTML=''; empRows=[]; schedCells=[];
+  const maxT=Math.max(...RUN.target);
+  // Time row
+  makeRow('<span class="text-[10px] font-bold text-neutral-400">TIME</span>',
+    (cell,c)=>{ const clk=(c+DAY_START)%HOURS; cell.className+=' text-[9px] font-semibold text-neutral-400 h-5';
+      cell.textContent = clk%3===0? String(clk):''; }, '', 'mb-0.5');
+  // Projected labour row
+  makeRow('<span class="text-[10px] font-bold text-neutral-500">PROJ.</span>',
+    (cell,c)=>{ cell.className+=' text-[9px] font-semibold text-neutral-600 h-6';
+      cell.style.background=`rgba(99,102,241,${(RUN.target[c]/maxT*0.8).toFixed(3)})`;
+      cell.textContent=RUN.target[c]; },
+    `<span class="text-[10px] text-neutral-400">peak ${maxT}</span>`);
+  // Scheduled labour row (updates during animation)
+  const sched=makeRow('<span class="text-[10px] font-bold text-neutral-500">SCHED.</span>',
+    (cell,c)=>{ cell.className+=' text-[9px] font-semibold text-emerald-700 h-6 bg-emerald-50/0';
+      cell.textContent='0'; schedCells.push(cell); },
+    '<span id="schedTotal" class="text-[10px] font-semibold text-emerald-600">0</span>', 'mb-1');
+
+  // Employee rows, ordered by start time (earliest at top). Each row still
+  // maps back to its placement step via empRows[stepIdx] for the reveal animation.
+  const startOf=s=>((s.sh-DAY_START)%HOURS+HOURS)%HOURS;
+  empRows=new Array(RUN.steps.length);
+  const order=RUN.steps.map((_,i)=>i).sort((a,b)=>
+    startOf(RUN.steps[a])-startOf(RUN.steps[b]) || RUN.steps[b].len-RUN.steps[a].len);
+  order.forEach((stepIdx,pos)=>{
+    const step=RUN.steps[stepIdx];
+    const startIdx=startOf(step), len=step.len, color=LEN_COLORS[len];
+    const row=document.createElement('div'); row.className='flex items-stretch h-[22px]';
+    const lead=document.createElement('div');
+    lead.className='w-14 shrink-0 flex items-center px-1 text-[10px] font-semibold text-neutral-400';
+    lead.textContent='#'+(pos+1);
+    const track=document.createElement('div'); track.className='relative flex flex-1';
+    for(let c=0;c<HOURS;c++){ const cell=document.createElement('div');
+      cell.className='flex-1 border-r border-neutral-100 last:border-r-0'; track.appendChild(cell); }
+    // bar segment(s) — split if it wraps past 2 AM
+    const bars=[]; const segs = startIdx+len<=HOURS
+      ? [[startIdx,len,'rounded']]
+      : [[startIdx,HOURS-startIdx,'rounded-l'],[0,len-(HOURS-startIdx),'rounded-r']];
+    segs.forEach(([s,w,rnd])=>{
+      const bar=document.createElement('div');
+      bar.className=`absolute top-[3px] bottom-[3px] ${rnd} opacity-0 flex items-center justify-center text-[9px] font-bold text-white/95 shadow-sm`;
+      bar.style.left=(s/HOURS*100)+'%'; bar.style.width=(w/HOURS*100)+'%'; bar.style.background=color;
+      if(w>=3) bar.textContent=len+'h';
+      track.appendChild(bar); bars.push(bar);
+    });
+    // unpaid break — punch a gap in the bar at the break hour
+    if(step.bo>=0){
+      const bIdx=(startIdx+step.bo)%HOURS;
+      const brk=document.createElement('div');
+      brk.className='absolute top-[2px] bottom-[2px] rounded-[2px] opacity-0 flex items-center justify-center text-[8px] bg-white';
+      brk.style.left=(bIdx/HOURS*100)+'%'; brk.style.width=(1/HOURS*100)+'%';
+      brk.style.boxShadow='inset 0 0 0 1px rgba(15,23,42,.18)';
+      brk.title='On break (no labour)'; brk.textContent='☕';
+      track.appendChild(brk); bars.push(brk);
+    }
+    const trail=document.createElement('div');
+    trail.className='w-24 shrink-0 flex items-center justify-end pr-1 text-[10px] font-semibold text-neutral-500 tabular-nums';
+    trail.textContent=`${hh(step.sh)}–${hh((step.sh+len)%HOURS)}`;
+    row.append(lead,track,trail); schedBody.appendChild(row);
+    empRows[stepIdx]={row,bars};
+  });
+}
+
+function revealEmployee(i){
+  const e=empRows[i]; if(!e) return;
+  e.bars.forEach(b=>{ b.classList.remove('opacity-0'); b.classList.add('animate-floatin'); });
+}
+function updateSchedLabour(staffed){
+  const maxT=Math.max(...RUN.target);
+  schedCells.forEach((cell,c)=>{ const v=staffed[c]; cell.textContent=v;
+    const over=v>RUN.target[c];
+    cell.style.background = v? `rgba(16,185,129,${Math.min(v/maxT,1)*0.28+0.06})` : 'transparent';
+    cell.style.color = over? '#b45309' : '#047857';
+  });
+  const tot=document.getElementById('schedTotal'); if(tot) tot.textContent=sum(staffed);
+}
+
+// ---------- Animation ----------
+let cur=-1, playing=true, timer=null, activeScenario=0;
+const SPEED=520;   // ms per shift placement
+
+function setActiveTab(i){
+  tabs.forEach((b,j)=>{
+    const on=j===i;
+    b.className='scenario-tab group text-left rounded-xl px-3.5 py-2 ring-1 transition active:scale-95 '+
+      (on?'sk-tab-on':'sk-tab-off');
+  });
+}
+
+function loadScenario(i){
+  clearInterval(timer);
+  activeScenario=i;
+  setActiveTab(i);
+  RUN=buildRun(SCENARIOS[i].forecast, activeBreaks>=99?Infinity:activeBreaks);
+  MAXY=Math.ceil(Math.max(...RUN.target,...RUN.steps.at(-1).staffed)/2)*2;   // even ceiling
+  document.getElementById('stShiftsTot').textContent='/ '+RUN.steps.length;
+  cols.forEach(c=>{ c.ghost.style.height=(RUN.target[c.idx]/MAXY*100)+'%'; c.bar.style.height='0%'; });
+  document.getElementById('ledger').innerHTML='';
+  buildSchedule();
+  cur=-1;
+  setPlaying(true);
+}
+
+function paint(i){
+  const step=RUN.steps[i];
+  // heatmap — normalize color to this step's worst deficit so it always blazes
+  const vmin=Math.min(...step.matrix.flat());
+  for(let r=0;r<heatCells.length;r++)for(let c=0;c<HOURS;c++){
+    const el=heatCells[r][c];
+    el.style.backgroundColor=heatColor(step.matrix[r][c],vmin);
+    el.style.boxShadow=''; el.style.transform=''; el.style.zIndex=''; el.classList.remove('hotcell');
+  }
+  const chosen=heatCells[step.r][step.c];
+  chosen.classList.add('hotcell');
+  chosen.style.transform='scale(1.4)'; chosen.style.zIndex='20'; chosen.style.borderRadius='4px';
+  chosen.classList.remove('animate-pop'); void chosen.offsetWidth; chosen.classList.add('animate-pop');
+
+  // coverage bars
+  cols.forEach(col=>{
+    col.bar.style.height=(step.staffed[col.idx]/MAXY*100)+'%';
+    col.wrap.classList.remove('bg-amber-100/60');
+  });
+  step.hrs.forEach(h=>{ const cl=clock(h); const col=cols[cl];
+    col.wrap.classList.add('bg-amber-100/60'); });   // soft band on hours the current shift covers
+
+  // employee schedule
+  revealEmployee(i);
+  updateSchedLabour(step.staffed);
+
+  // stats
+  const staffedNow=step.staffed;
+  const covered=RUN.target.reduce((a,t,k)=>a+Math.min(staffedNow[k],t),0);
+  document.getElementById('stShifts').textContent=i+1;
+  document.getElementById('stHours').textContent=RUN.steps.slice(0,i+1).reduce((a,s)=>a+s.len,0);
+  document.getElementById('stCover').textContent=Math.round(covered/RUN.tsum*100)+'%';
+  document.getElementById('stPeak').textContent=Math.max(...staffedNow);
+  document.getElementById('stepCaption').innerHTML=
+    `Step <b class="text-neutral-700">${i+1}</b> — placing a <b class="sk-accent">${step.len}h</b> shift at `+
+    `<b class="text-neutral-700">${hh(step.sh)}</b> → covers ${hh(step.sh)}–${hh((step.sh+step.len)%HOURS)}`;
+
+  // ledger
+  const led=document.getElementById('ledger');
+  const chip=document.createElement('div');
+  chip.className='animate-floatin flex items-center justify-between sk-ledger-item px-3 py-2';
+  chip.innerHTML=`<div class="flex items-center gap-2.5">
+      <span class="grid place-items-center h-7 w-7 rounded-lg sk-chip-on text-white text-xs font-bold">${i+1}</span>
+      <span class="font-semibold text-neutral-700 tabular-nums">${hh(step.sh)} → ${hh((step.sh+step.len)%HOURS)}</span></div>
+    <span class="text-xs font-semibold sk-accent sk-chip-soft rounded-md px-2 py-0.5">${step.len}h</span>`;
+  led.prepend(chip);
+}
+
+function tick(){
+  if(cur<RUN.steps.length-1){ cur++; paint(cur); }
+  else{ setPlaying(false); }
+}
+function setPlaying(p){
+  playing=p;
+  document.getElementById('playLabel').textContent=p?'Pause':(cur>=RUN.steps.length-1?'Done':'Play');
+  document.getElementById('playIcon').innerHTML=p
+    ?'<path d="M6 5h4v14H6zM14 5h4v14h-4z"/>':'<path d="M8 5v14l11-7z"/>';
+  clearInterval(timer);
+  if(p) timer=setInterval(tick,SPEED);
+}
+function replay(){ loadScenario(activeScenario); }
+document.getElementById('playBtn').onclick=()=>{
+  if(cur>=RUN.steps.length-1 && !playing){ replay(); return; }
+  setPlaying(!playing);
+};
+document.getElementById('replayBtn').onclick=replay;
+
+loadScenario(0);
+</script>
+</body>
+</html>
